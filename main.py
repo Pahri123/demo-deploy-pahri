@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 import tensorflow as tf
-import re
+import regex as re
 import pandas as pd
 from transformers import BertTokenizer, TFBertModel
 from sklearn.metrics.pairwise import cosine_similarity
