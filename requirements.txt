@@ -1,5 +1,4 @@
 uvicorn[standard]
-os
 fastapi
 pydantic
 tensorflow
