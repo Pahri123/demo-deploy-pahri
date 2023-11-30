@@ -151,3 +151,4 @@ async def colab(item: User_colab):
     result_dict = dict(zip(user_data.iloc[top_n_colab]['User_ID'].tolist(), similarities_preference[top_n_colab]))
 
     return item.user_id, result_dict
+
