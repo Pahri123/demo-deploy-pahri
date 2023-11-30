@@ -14,12 +14,8 @@ import nltk
 
 app = FastAPI()
 
-# Load the tokenizer
-tokenizer = BertTokenizer.from_pretrained('tokenizer_directory')
-
-# Load the model
-model = TFBertModel.from_pretrained('model_directory')
-
+tokenizer = BertTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+model = TFBertModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 nltk.download('punkt')
 tfidf_vectorizer = TfidfVectorizer(stop_words='english')
 
