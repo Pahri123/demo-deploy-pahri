@@ -1,0 +1,10 @@
+uvicorn[standard]
+os
+fastapi
+pydantic
+tensorflow
+re
+pandas
+transformers
+sklearn
+nltk
