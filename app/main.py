@@ -1,3 +1,5 @@
+import uvicorn
+import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 import tensorflow as tf
@@ -12,8 +14,12 @@ import nltk
 
 app = FastAPI()
 
-tokenizer = BertTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-model = TFBertModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+# Load the tokenizer
+tokenizer = BertTokenizer.from_pretrained('tokenizer_directory')
+
+# Load the model
+model = TFBertModel.from_pretrained('model_directory')
+
 nltk.download('punkt')
 tfidf_vectorizer = TfidfVectorizer(stop_words='english')
 
@@ -152,3 +158,8 @@ async def colab(item: User_colab):
 
     return item.user_id, result_dict
 
+# Starting the server
+# Your can check the API documentation easily using /docs after the server is running
+port = os.environ.get("PORT", 8080)
+print(f"Listening to http://0.0.0.0:{port}")
+uvicorn.run(app, host='0.0.0.0',port=port)
