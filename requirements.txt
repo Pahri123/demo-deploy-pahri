@@ -5,5 +5,5 @@ tensorflow
 regex
 pandas
 transformers
-scikit-lear
+scikit-learn
 nltk
