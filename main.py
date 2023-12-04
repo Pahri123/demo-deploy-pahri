@@ -1,33 +1,38 @@
 import uvicorn
+import numpy as np
 import os
+from sentence_transformers.cross_encoder import CrossEncoder
 from fastapi import FastAPI
 from pydantic import BaseModel
 import tensorflow as tf
 import regex as re
 import pandas as pd
+import nltk
 from transformers import BertTokenizer, TFBertModel
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import linear_kernel
-import nltk
+
+nltk.download('punkt')
 
 app = FastAPI()
 
-tokenizer = BertTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-model = TFBertModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-nltk.download('punkt')
+tokenizer = BertTokenizer.from_pretrained("tokenizer_dir")
+model = TFBertModel.from_pretrained("model_dir")
+model_trained = CrossEncoder('trained-pytorch-model')
 tfidf_vectorizer = TfidfVectorizer(stop_words='english')
+scaler = MinMaxScaler()
 
-#nanti sumber vacancy data nya di ubah oleh cc utk nyambungin ke DB
-vacancy_data_raw = pd.read_csv("https://raw.githubusercontent.com/aldrianaliv/CapstoneProject/main/glints-data%20(new).csv")
+# [CC] nanti sumber vacancy data nya di ubah oleh cc utk nyambungin ke DB
+vacancy_data_raw = pd.read_csv(
+    "https://raw.githubusercontent.com/aldrianaliv/CapstoneProject/main/glints-data%20(new).csv")
 
 vacancy_data_raw.fillna('', inplace=True)
 vacancy_data = vacancy_data_raw[vacancy_data_raw['Study_requirement'] != 'BRD, FSD, UAT']
 job_title = vacancy_data['Job_title']
 job_title_embedding = tokenizer(list(job_title), padding=True, truncation=True, return_tensors="tf")
-job_title_output = model(**job_title_embedding)
-job_title_embedding = tf.reduce_mean(job_title_output.last_hidden_state, axis=1)
+job_title_embedding = model(**job_title_embedding)
+job_title_embedding = tf.reduce_mean(job_title_embedding.last_hidden_state, axis=1)
 
 skills_req = pd.DataFrame(vacancy_data, columns=['Skills'])
 job_skill_embedding = tfidf_vectorizer.fit_transform(skills_req['Skills'])
@@ -46,21 +51,20 @@ class User_colab(BaseModel):
     user_preference: str
 
 
-
 @app.post('/')
 async def root(item: User):
     def first_rec_cosSim(job_title_embedding, job_skill_embedding, preference, skillset):
         preference_embedding = tokenizer([preference], padding=True, truncation=True, return_tensors="tf")
-        preference_output = model(**preference_embedding)
-        preference_embedding = tf.reduce_mean(preference_output.last_hidden_state, axis=1)
-        similarities_preference = cosine_similarity(job_title_embedding, preference_embedding)
+        preference_embedding = model(**preference_embedding)
+        preference_embedding = tf.reduce_mean(preference_embedding.last_hidden_state, axis=1)
+        similarities_preference = cosine_similarity(job_title_embedding, preference_embedding).flatten()
 
         skillset_embedding = tfidf_vectorizer.transform([skillset])
-        similarities_skill = linear_kernel(skillset_embedding, job_skill_embedding).flatten()
-        return similarities_preference, similarities_skill
+        similarities_skill = cosine_similarity(skillset_embedding, job_skill_embedding).flatten()
+        similarities_skill_dict = dict(zip(vacancy_data['id'], similarities_skill))
+        return similarities_preference, similarities_skill, similarities_skill_dict
 
     def combine_similarity(similarities_preference, similarities_skill, weights):
-        scaler = MinMaxScaler()
         normalized_preference = scaler.fit_transform(similarities_preference.reshape(-1, 1))
         normalized_skill = scaler.fit_transform(similarities_skill.reshape(-1, 1))
         combined_similarity = weights[0] * normalized_preference.flatten() + weights[1] * normalized_skill.flatten()
@@ -104,22 +108,47 @@ async def root(item: User):
         selected_ids = matched_rows['id'].tolist()
         return selected_ids, similarity_dict
 
-    def exclude_and_display(similarity_dict, selected_ids, vacancy_data, n):
-        filtered_dict = {key: value for key, value in similarity_dict.items() if key not in selected_ids}
-        filtered_dict = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
-        filtered_dict_sorted = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
-        top_n = {key: filtered_dict_sorted[key] for key in list(filtered_dict_sorted)[:n]}
-        return filtered_dict, top_n
-
     def first_rec(weights, user_preference, user_skill, study_level, vacancy_data, top_n=20):
-        similarities_preference, similarities_skill = first_rec_cosSim(job_title_embedding, job_skill_embedding,
-                                                                       user_preference, user_skill)
+        similarities_preference, similarities_skill, similarities_skill_dict = first_rec_cosSim(job_title_embedding,
+                                                                                                job_skill_embedding,
+                                                                                                user_preference,
+                                                                                                user_skill)
         combined_similarity = combine_similarity(
             similarities_preference, similarities_skill, weights
         )
         selected_ids, similarity_dict = match_study_level(study_level, vacancy_data, combined_similarity)
-        filtered_dict, first_rec = exclude_and_display(similarity_dict, selected_ids, vacancy_data, top_n)
-        return filtered_dict, first_rec
+
+        # model1 first rec without sorting
+        filtered_dict = {key: value for key, value in similarity_dict.items() if key not in selected_ids}
+
+        # sorting
+        filtered_dict_sorted = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
+
+        # ambil top N
+        model1_rec = {key: filtered_dict_sorted[key] for key in list(filtered_dict_sorted)[:200]}
+
+        # Mengambil seluruh data dari kolom 'id' berdasarkan kunci dalam dictionary
+        selected_data = vacancy_data[vacancy_data['id'].isin(model1_rec.keys())]
+        pairs = [[item.user_preference, job_name] for job_name in list(selected_data['Job_title'])]
+        similarities_preference_model2 = model_trained.predict(pairs)
+
+        normalized_preference_model2 = scaler.fit_transform(similarities_preference_model2.reshape(-1, 1))
+        similarities_skill = {key: similarities_skill_dict[key] for key in model1_rec.keys()}
+        similarities_skill = np.array(list(similarities_skill.values()))
+
+        combined_similarity2 = weights[0] * normalized_preference_model2.flatten() + weights[
+            1] * similarities_skill.flatten()
+
+        # Mengganti nilai model1_rec dengan nilai dari list combined_similarity2
+        model2_rec = {key: value for key, value in zip(model1_rec.keys(), combined_similarity2)}
+
+        # sorting
+        model2_rec = dict(sorted(model2_rec.items(), key=lambda item: item[1], reverse=True))
+
+        # ambil top N
+        model2_rec = {key: model2_rec[key] for key in list(model2_rec)[:top_n]}
+
+        return filtered_dict, model2_rec
 
     def display_loc_rec(keyword, vacancy_data, filtered_dict, n=20):
         pattern = fr".*({keyword}).*"
@@ -131,20 +160,21 @@ async def root(item: User):
         top_n = {key: filtered_dict_sorted[key] for key in list(filtered_dict_sorted)[:n]}
         return top_n
 
-    filtered_dict, first_rec_result = first_rec([0.5, 0.5], item.user_preference, item.user_skill, item.user_study_level,
+    filtered_dict, first_rec_result = first_rec([0.5, 0.5], item.user_preference, item.user_skill,
+                                                item.user_study_level,
                                                 vacancy_data, 20)
     loc_rec = display_loc_rec(item.user_loc, vacancy_data, filtered_dict)
-    return first_rec_result, loc_rec
+    return item.user_id, first_rec_result, loc_rec
 
 
 @app.post('/colab')
 async def colab(item: User_colab):
-    # nanti sumber user_data nya di ubah oleh cc utk nyambungin ke DB
+    # [CC] nanti sumber user_data nya di ubah oleh cc utk nyambungin ke DB
     user_data = pd.read_csv(
         "https://raw.githubusercontent.com/YustafKusuma/kerjago-vacancy-recommendation-system/master/data/user_data.csv")
     global_preference_embedding = tfidf_vectorizer.fit_transform(user_data['Preference'])
     preference_embedding = tfidf_vectorizer.transform([item.user_preference])
-    similarities_preference = linear_kernel(global_preference_embedding, preference_embedding).flatten()
+    similarities_preference = cosine_similarity(global_preference_embedding, preference_embedding).flatten()
 
     # Ambil 5 teratas
     top_n_colab = similarities_preference.argsort()[:-5 - 1:-1]
@@ -154,6 +184,7 @@ async def colab(item: User_colab):
 
     return item.user_id, result_dict
 
+
 # Starting the server
 # Your can check the API documentation easily using /docs after the server is running
-uvicorn.run(app, host='0.0.0.0',port=8080)
+uvicorn.run(app, host='0.0.0.0', port=8080)
