@@ -1,4 +1,6 @@
 uvicorn[standard]
+numpy
+sentence_transformers
 fastapi
 pydantic
 tensorflow
