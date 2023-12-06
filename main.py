@@ -17,9 +17,9 @@ nltk.download('punkt')
 
 app = FastAPI()
 
-tokenizer = BertTokenizer.from_pretrained("tokenizer_dir")
-model = TFBertModel.from_pretrained("model_dir")
-model_trained = CrossEncoder('trained-pytorch-model')
+tokenizer = BertTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+model = TFBertModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+model_trained = CrossEncoder('pahri/sts-trained-lokergo')
 tfidf_vectorizer = TfidfVectorizer(stop_words='english')
 scaler = MinMaxScaler()
 
