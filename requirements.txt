@@ -9,3 +9,5 @@ pandas
 transformers
 scikit-learn
 nltk
+SQLAlchemy
+mysql-connector-python
