@@ -23,11 +23,11 @@ model_trained = CrossEncoder('trained-pytorch-model')
 tfidf_vectorizer = TfidfVectorizer(stop_words='english')
 scaler = MinMaxScaler()
 
-db_username = 'root'
-db_password = ''
-db_host = 'localhost'
+db_username = '$DBUSERNAME'
+db_password = '$DBPASSWORD'
+db_host = '$DBHOST'
 db_port = '3306'
-db_name = 'test'
+db_name = '$DBNAME'
 
 # Create a connection string
 connection_string = f'mysql+mysqlconnector://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}'
