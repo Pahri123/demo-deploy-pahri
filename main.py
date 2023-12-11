@@ -20,7 +20,8 @@ app = FastAPI()
 tokenizer = BertTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 model = TFBertModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 model_trained = CrossEncoder('pahri/sts-trained-lokergo')
-tfidf_vectorizer = TfidfVectorizer(stop_words='english')
+tfidf_vectorizer1 = TfidfVectorizer(stop_words='english')
+tfidf_vectorizer2 = TfidfVectorizer(stop_words='english')
 scaler = MinMaxScaler()
 
 db_username = 'root'
@@ -46,7 +47,7 @@ job_title_embedding = model(**job_title_embedding)
 job_title_embedding = tf.reduce_mean(job_title_embedding.last_hidden_state, axis=1)
 
 skills_req = pd.DataFrame(vacancy_data, columns=['skills'])
-job_skill_embedding = tfidf_vectorizer.fit_transform(skills_req['skills'])
+job_skill_embedding = tfidf_vectorizer1.fit_transform(skills_req['skills'])
 
 
 class User(BaseModel):
@@ -70,7 +71,7 @@ async def root(item: User):
         preference_embedding = tf.reduce_mean(preference_embedding.last_hidden_state, axis=1)
         similarities_preference = cosine_similarity(job_title_embedding, preference_embedding).flatten()
 
-        skillset_embedding = tfidf_vectorizer.transform([skillset])
+        skillset_embedding = tfidf_vectorizer1.transform([skillset])
         similarities_skill = cosine_similarity(skillset_embedding, job_skill_embedding).flatten()
         similarities_skill_dict = dict(zip(vacancy_data['job_id'], similarities_skill))
         return similarities_preference, similarities_skill, similarities_skill_dict
@@ -136,7 +137,7 @@ async def root(item: User):
         filtered_dict_sorted = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
 
         # ambil top N
-        model1_rec = {key: filtered_dict_sorted[key] for key in list(filtered_dict_sorted)[:200]}
+        model1_rec = {key: filtered_dict_sorted[key] for key in list(filtered_dict_sorted)[:100]}
 
         # Mengambil seluruh data dari kolom 'job_id' berdasarkan kunci dalam dictionary
         selected_data = vacancy_data[vacancy_data['job_id'].isin(model1_rec.keys())]
@@ -183,8 +184,8 @@ async def colab(item: User_colab):
     # [CC] nanti sumber user_data nya di ubah oleh cc utk nyambungin ke DB
     user_data = pd.read_csv(
         "https://raw.githubusercontent.com/YustafKusuma/kerjago-vacancy-recommendation-system/master/data/user_data.csv")
-    global_preference_embedding = tfidf_vectorizer.fit_transform(user_data['Preference'])
-    preference_embedding = tfidf_vectorizer.transform([item.user_preference])
+    global_preference_embedding = tfidf_vectorizer2.fit_transform(user_data['Preference'])
+    preference_embedding = tfidf_vectorizer2.transform([item.user_preference])
     similarities_preference = cosine_similarity(global_preference_embedding, preference_embedding).flatten()
 
     # Ambil 5 teratas
